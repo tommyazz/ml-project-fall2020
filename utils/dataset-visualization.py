@@ -4,6 +4,11 @@
 import pandas as pd
 from pathlib import Path, PureWindowsPath
 import matplotlib.pyplot as plt
+import tensorflow as tf
+
+print(tf.__version__)
+tf.config.list_physical_devices('GPU') 
+print(tf.test.gpu_device_name())
 
 train_set_folder = "../dev_dataset_csv/"
 train_dataset = pd.read_csv(train_set_folder + "train_set.csv")
@@ -24,7 +29,7 @@ path = Path(train_set_folder, PureWindowsPath(image_path))
 print(f"The complete path to the image is: {path}")
 image = plt.imread(path)  # load the image
 print(f"The shape of the image is: {image.shape}")
-plt.imshow(image)  # visualize the image
-plt.show()
+#plt.imshow(image)  # visualize the image
+#plt.show()
 
 
