@@ -15,5 +15,10 @@ Define a function for loading the data from a given folder path.
 # The 9th column (starting from 1) would be the true labels column (we want to predict the first future beam)
 # You should one-hot-encode the true labels columns. There's an sklearn function for this.
 
-def load_beam_data():
-    # you can change name of this function and add other functions, if the code will be much cleaner, of course
+def load_beam_data(path):
+    df = pd.read_csv(path)
+    feature_cols = ["Beam 1", "Beam 2", "Beam 3", "Beam 4", "Beam 5", "Beam 6", "Beam 7", "Beam 8"]
+    target_cols = ["Beam 9"]
+    features = df[feature_cols].to_numpy()
+    target = df[target_cols].to_numpy()
+    return features, target 
