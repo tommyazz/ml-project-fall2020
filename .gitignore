@@ -1,3 +1,5 @@
 dev_dataset_csv
 viwi_bt_testset_csv_format_eval
 *.out
+*__pycache__/
+*.s
