@@ -5,11 +5,12 @@
 # Using the functions you defined in "utils" and build_model.py, create code to train the model.
 
 import numpy as np
+import pickle
 import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.preprocessing import image
-from tensorflow.keras.callbacks import ReduceLROnPlateau, LearningRateScheduler
+from tensorflow.keras.callbacks import ReduceLROnPlateau, LearningRateScheduler, ModelCheckpoint
 from sklearn.preprocessing import OneHotEncoder
 from utils.data_loader import *
 from build_model import build_cnn_model
@@ -43,8 +44,10 @@ class CustomDataGenerator(tf.keras.utils.Sequence):
             y_batch[i,:] = self.y[idx,:]
             beam_batch[i,:] = self.X[idx, 0:self.hist_size]
             for j in range(self.hist_size):
-                im = image.img_to_array(image.load_img(self.X[idx, self.hist_size+j], target_size=(self.im_size[0], self.im_size[1])), data_format="channels_last")
-                image_batch[i,j,:,:,:] = im/255.0
+                im = image.load_img(self.X[idx, self.hist_size+j], target_size=(self.im_size[0], self.im_size[1]))
+                im_a = image.img_to_array(im, data_format="channels_last", dtype=np.float16)
+                im.close()
+                image_batch[i,j,:,:,:] = im_a/255.0
     
         return [beam_batch, image_batch], y_batch
 
@@ -104,17 +107,23 @@ def scheduler(epoch, lr):
 lr_callback = LearningRateScheduler(scheduler)
 '''
 
+model_path = "./model-{epoch:02d}.h5"
+model_checkpoint = ModelCheckpoint(model_path, monitor="val_accuracy", save_best_only=True, verbose=1)
+
 n_epochs = 100
-batch_size = 1000
+tr_batch_size = 32
+val_batch_size = 100
 # Creates Training and Validation data generators
-train_generator = CustomDataGenerator(Xtr, ytr_e, hist_size, target_im_size, batch_size=batch_size)
-val_generator = CustomDataGenerator(Xval, yval_e, hist_size, target_im_size, batch_size=Xval.shape[0]//10)
+train_generator = CustomDataGenerator(Xtr, ytr_e, hist_size, target_im_size, batch_size=tr_batch_size)
+val_generator = CustomDataGenerator(Xval, yval_e, hist_size, target_im_size, batch_size=val_batch_size)
 [Xval_beam, Xval_image], yval_gen = val_generator.__getitem__(0)
 
 # fit model on train data using batch_size and epochs as in paper [1]. Use also the callbacks you defined.
 # https://keras.io/api/models/model_training_apis/
-hist = model.fit(train_generator, validation_data=[Xval_beam, Xval_image], epochs=n_epochs)
+hist = model.fit(train_generator, validation_data=([Xval_beam, Xval_image], yval_gen), epochs=n_epochs, callbacks=[model_checkpoint])
+# hist = model.fit(train_generator, epochs=n_epochs)
 
 # plot training statistics. 
+pickle.dump(hist.history, open( "history.p", "wb" ))
 
 # evaluate model on test data. print the accuracy 
