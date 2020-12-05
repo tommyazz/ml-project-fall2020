@@ -36,20 +36,20 @@ class CustomDataGenerator(tf.keras.utils.Sequence):
         return self.__getdata__(indexes)
 
     def __getdata__(self, indexes):
-        beam_batch = tf.zeros((self.batch_size, self.hist_size), dtype=tf.dtypes.float16)
-        image_batch = tf.zeros((self.batch_size, self.hist_size, self.im_size[0], self.im_size[1], self.im_size[2]),
-                               dtype=tf.dtypes.float16)
-        y_batch = tf.zeros((self.batch_size, self.num_classes), dtype=tf.dtypes.int32)
-        scaling = tf.constant([255], dtype=tf.dtypes.float16)
+        beam_batch = []
+        image_batch = []
+        y_batch = []
+        scaling = tf.constant([255], dtype=tf.dtypes.float32)
         for i,idx in enumerate(indexes):
-            y_batch[i,:] = self.y[idx,:]
-            beam_batch[i,:] = self.X[idx, 0:self.hist_size]
+            y_batch.append(self.y[idx,:])
+            beam_batch.append(self.X[idx, 0:self.hist_size])
+            h_image_b = []
             for j in range(self.hist_size):
-                img = tf.image.decode_jpeg(tf.io.read_file(self.X[idx, self.hist_size+j])))
+                img = tf.image.decode_jpeg(tf.io.read_file(tf.compat.path_to_str(self.X[idx, self.hist_size+j])))
                 img = tf.image.resize(img, [self.im_size[0], self.im_size[1]])
-                image_batch[i,j,:,:,:] = tf.divide(img, scaling)
-    
-        return [beam_batch, image_batch], y_batch
+                h_image_b.append(tf.divide(img, scaling))
+            image_batch.append(h_image_b)
+        return [tf.stack(beam_batch), tf.stack(image_batch)], tf.stack(y_batch)
 
     def on_epoch_end(self):
         self.index = np.arange(self.tot_data)
