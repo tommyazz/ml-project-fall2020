@@ -8,18 +8,60 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing import image
 from tensorflow.keras.callbacks import ReduceLROnPlateau, LearningRateScheduler
 from sklearn.preprocessing import OneHotEncoder
-from utils.data_loader import load_beam_data
-from build_model import build_gru_model
+from utils.data_loader import *
+from build_model import build_cnn_model
+
+class CustomDataGenerator(tf.keras.utils.Sequence):
+    def __init__(self, X, y, hist_size, im_size, batch_size=32, shuffle=True):
+        self.X = X
+        self.y = y
+        self.tot_data = self.X.shape[0]
+        self.num_classes = self.y.shape[1]
+        self.hist_size = hist_size
+        self.im_size = im_size
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.on_epoch_end()
+    
+    def __len__(self):
+        # returns the number of steps per epoch
+        return self.tot_data // self.batch_size
+
+    def __getitem__(self, index):
+        # returns one batch of data
+        indexes = self.index[index * self.batch_size:(index + 1) * self.batch_size]
+        return self.__getdata__(indexes)
+
+    def __getdata__(self, indexes):
+        beam_batch = np.zeros((self.batch_size, self.hist_size))
+        image_batch = np.zeros((self.batch_size, self.hist_size, self.im_size[0], self.im_size[1], self.im_size[2]))
+        y_batch = np.zeros((self.batch_size, self.num_classes))
+        for i,idx in enumerate(indexes):
+            y_batch[i,:] = self.y[idx,:]
+            beam_batch[i,:] = self.X[idx, 0:self.hist_size]
+            for j in range(self.hist_size):
+                im = image.img_to_array(image.load_img(self.X[idx, self.hist_size+j], target_size=(self.im_size[0], self.im_size[1])), data_format="channels_last")
+                image_batch[i,j,:,:,:] = im/255.0
+    
+        return [beam_batch, image_batch], y_batch
+
+    def on_epoch_end(self):
+        self.index = np.arange(self.tot_data)
+        if self.shuffle:
+            np.random.shuffle(self.index)
 
 # load training, validation and test data (note: there's no need to scale the data)
+
 train_path = "./dev_dataset_csv/train_set.csv"
 val_path = "./dev_dataset_csv/val_set.csv"
 test_path = "./viwi_bt_testset_csv_format_eval/testset_evaluation.csv"
-Xtr, ytr = load_beam_data(train_path)
-Xval, yval = load_beam_data(val_path)
+Xtr, ytr = load_beam_visual_data(train_path)
+Xval, yval = load_beam_visual_data(val_path)
 # Xts, yts = load_beam_data(test_path) # Test data is formatted in a differemt way, need to modify the loader
+
 print(f"Training data shape: {Xtr.shape}")
 print(f"Validation data shape: {Xval.shape}")
 # print(f"Test data shape: {Xts.shape}")
@@ -34,16 +76,17 @@ print(f"Encoded training target shape: {ytr_e.shape}")
 print(f"Encoded validation target shape: {yval_e.shape}")
 # print(f"Encoded test target shape: {yts_e.shape}")
 
+
 # create the model, print a summary to check all the parameters
 K.clear_session()
-input_size = Xtr.shape[1]
-codebook_size = np.max(Xtr)+1
+hist_size = Xtr.shape[1]//2
+codebook_size = ytr_e.shape[1]
 print(codebook_size)
-model = build_gru_model(input_size, int(codebook_size))
+target_im_size = (1280//4,720//4,3)
+
+model = build_cnn_model(hist_size, target_im_size, int(codebook_size), num_kernels=20)
 print(model.summary())
 
-n_epochs = 100
-batch_size = 1000
 # compile the model with proper optimizer (Adam(lr=0.001)) and loss function 
 init_lr = 1e-3
 opt = Adam(lr=init_lr, amsgrad=True)
@@ -51,10 +94,7 @@ model.compile(optimizer=opt, loss='categorical_crossentropy', metrics=['accuracy
 
 # define the following callbacks:
 # - model_checkpoint: https://keras.io/api/callbacks/model_checkpoint/ (read doc and understand its function)
-# - (optional) reduce_lr: https://keras.io/api/callbacks/reduce_lr_on_plateau/ (read doc and understand its function)
-# reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.00001, verbose=1)
-lr_update_step = n_epochs // 2
-lr_decay = 0.1
+'''
 def scheduler(epoch, lr):
     if (epoch+1) % lr_update_step == 0:
         print(f"Upating learning rate at epoch: {epoch}; new lr: {lr*lr_decay}")
@@ -62,11 +102,18 @@ def scheduler(epoch, lr):
     else:
         return lr        
 lr_callback = LearningRateScheduler(scheduler)
+'''
+
+n_epochs = 100
+batch_size = 1000
+# Creates Training and Validation data generators
+train_generator = CustomDataGenerator(Xtr, ytr_e, hist_size, target_im_size, batch_size=batch_size)
+val_generator = CustomDataGenerator(Xval, yval_e, hist_size, target_im_size, batch_size=Xval.shape[0]//10)
+[Xval_beam, Xval_image], yval_gen = val_generator.__getitem__(0)
 
 # fit model on train data using batch_size and epochs as in paper [1]. Use also the callbacks you defined.
 # https://keras.io/api/models/model_training_apis/
-hist = model.fit(Xtr, ytr_e, validation_data=(Xval, yval_e), 
-                 batch_size=batch_size, epochs=n_epochs, callbacks=[lr_callback])
+hist = model.fit(train_generator, validation_data=[Xval_beam, Xval_image], epochs=n_epochs)
 
 # plot training statistics. 
 

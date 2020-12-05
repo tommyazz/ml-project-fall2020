@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Embedding, Dense, Flatten, Dropout, GRU
+from tensorflow.keras.layers import Input, Embedding, Dense, Flatten, Dropout, GRU, LSTM, ConvLSTM2D, MaxPooling3D, MaxPooling2D, BatchNormalization, Concatenate
 from tensorflow.keras.activations import relu
 from tensorflow.keras.models import Model
 
@@ -47,4 +47,54 @@ def build_gru_model(input_size, codebook_size, embed_size=50, hidden_size=20, nu
     return model
 
 
-# Create a method that returns the second model (3D CNNs + GRUs) using Keras APIs
+# Create a method that returns the second model (CNN+LSTM) using Keras APIs
+def build_cnn_model(hist_size, image_shape, codebook_size, num_kernels=40, embed_size=50, hidden_size=20, cnn_layers=3, rnn_layers=2, dropout=0.2):
+
+    '''input_cnn = Input(shape=(hist_size, image_shape[0], image_shape[1], image_shape[2]), name="input_cnn")
+    layer_o_cnn = Conv3D(64, kernel_size=(1,3,3), activation="relu", data_format="channels_last", name="conv_1")(input_cnn)
+    layer_o_cnn = MaxPooling3D(pool_size=(1,2,2))(layer_o_cnn)
+    layer_o_cnn = BatchNormalization(center=True, scale=True)(layer_o_cnn)
+    layer_o_cnn = Conv3D(64, kernel_size=(1,3,3), activation="relu", name="conv_2")(layer_o_cnn)
+    layer_o_cnn = MaxPooling3D(pool_size=(1,2,2))(layer_o_cnn)
+    layer_o_cnn = BatchNormalization(center=True, scale=True)(layer_o_cnn)
+    layer_o_cnn = Conv3D(64, kernel_size=(1,3,3), activation="relu", name="conv_3")(layer_o_cnn)
+    layer_o_cnn = MaxPooling3D(pool_size=(1,2,2))(layer_o_cnn)
+    layer_o_cnn = BatchNormalization(center=True, scale=True)(layer_o_cnn)'''
+
+    input_cnn = Input(shape=(hist_size, image_shape[0], image_shape[1], image_shape[2]), name="input_cnn_lstm")
+    input_rnn = Input(shape=(hist_size,), name="input_rnn")
+
+    # CNN+LSTM part of the network (spatio-temporal features extraction from a sequence of images)
+    layer_out_cnn = input_cnn
+    for i in range(cnn_layers):
+        if i+1 == cnn_layers:
+            layer_out_cnn = ConvLSTM2D(hidden_size, strides=(2,2), kernel_size=(3,3), return_sequences=False, data_format="channels_last",
+                                       name="cnn_layer_"+str(i+1))(layer_out_cnn)
+            layer_out_cnn = MaxPooling2D(pool_size=(2,2))(layer_out_cnn)
+            layer_out_cnn = BatchNormalization()(layer_out_cnn)
+        else:
+            layer_out_cnn = ConvLSTM2D(num_kernels, strides=(2,2), kernel_size=(3,3), return_sequences=True, data_format="channels_last",
+                                       name="cnn_layer_"+str(i+1))(layer_out_cnn)
+            layer_out_cnn = MaxPooling3D(pool_size=(1,2,2))(layer_out_cnn)
+            layer_out_cnn = BatchNormalization()(layer_out_cnn)
+    layer_out_cnn = Flatten()(layer_out_cnn)
+
+    # LSTM part of the network (temporal features extraction from a sequence of beams)
+    embedding = Embedding(codebook_size, embed_size, name="embedding_layer")(input_rnn)
+    layer_out_rnn = embedding
+    for i in range(rnn_layers):
+        if i+1 == rnn_layers:
+            layer_out_rnn = LSTM(hidden_size, return_sequences=False, 
+                                 name="recurrent_layer_"+str(i+1))(layer_out_rnn)
+        else:
+            layer_out_rnn = LSTM(hidden_size, return_sequences=True, 
+                                 name="recurrent_layer_"+str(i+1))(layer_out_rnn)
+    # Merge the two networks
+    merge_out = Concatenate()([layer_out_rnn, layer_out_cnn])
+
+    dense_out = Dense(codebook_size, activation='relu')(merge_out)
+    dense_out = Dense(codebook_size, activation='softmax')(dense_out)
+
+    model = Model(inputs=[input_rnn, input_cnn], outputs=dense_out)
+
+    return model
