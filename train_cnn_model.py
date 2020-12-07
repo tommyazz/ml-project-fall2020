@@ -112,7 +112,7 @@ model_checkpoint = ModelCheckpoint(model_path, monitor="val_accuracy", save_best
 
 n_epochs = 100
 tr_batch_size = 32
-val_batch_size = 100
+val_batch_size = 1
 # Creates Training and Validation data generators
 train_generator = CustomDataGenerator(Xtr, ytr_e, hist_size, target_im_size, batch_size=tr_batch_size)
 val_generator = CustomDataGenerator(Xval, yval_e, hist_size, target_im_size, batch_size=val_batch_size)
@@ -120,10 +120,18 @@ val_generator = CustomDataGenerator(Xval, yval_e, hist_size, target_im_size, bat
 
 # fit model on train data using batch_size and epochs as in paper [1]. Use also the callbacks you defined.
 # https://keras.io/api/models/model_training_apis/
-hist = model.fit(train_generator, validation_data=([Xval_beam, Xval_image], yval_gen), epochs=n_epochs, callbacks=[model_checkpoint])
+n_steps = Xtr.shape[0] // tr_batch_size
+for ep in range(n_epochs):
+    for step in range(n_steps):
+        [Xtrain_beam, Xtrain_im], ytrain = train_generator.__getitem__(step)
+        results = model.train_on_batch([Xtrain_beam, Xtrain_im], ytrain)
+    train_generator.on_epoch_end()
+    print(f"Completed epoch: {ep}")
+
+# hist = model.fit(train_generator, validation_data=([Xval_beam, Xval_image], yval_gen), epochs=n_epochs, callbacks=[model_checkpoint])
 # hist = model.fit(train_generator, epochs=n_epochs)
 
 # plot training statistics. 
-pickle.dump(hist.history, open( "history.p", "wb" ))
+# pickle.dump(hist.history, open( "history.p", "wb" ))
 
 # evaluate model on test data. print the accuracy 
