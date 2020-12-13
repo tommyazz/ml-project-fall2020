@@ -7,4 +7,7 @@ Ozlem Yildiz (zy2043)
 
 The reference scripts for the project are:
 [Recurrent GRU Model (presented in the project report)](ml_project_rnn_params_v2_.ipynb)
+
 [CNN+LSTM Model](ml_project_just_cnnlstm_.ipynb)
+
+The scripts have been run in Google Colab.
