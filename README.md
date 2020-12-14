@@ -6,6 +6,8 @@ Tommy Azzino (ta1731)
 Ozlem Yildiz (zy2043)
 Kubilay Ulger (ou2007)
 
+The project report can be found here: [Report](ProjectReport.pdf)
+
 The reference scripts for the project are:
 
 [Recurrent GRU Model (presented in the project report)](ml_project_rnn_params_v2_.ipynb)
